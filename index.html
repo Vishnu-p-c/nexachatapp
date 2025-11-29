@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nexa — Login</title>
+    <link rel="stylesheet" href="css/common.css">
+  </head>
+  <body>
+    <div style="max-width:420px;margin:60px auto;padding:24px;">
+      <h2 style="margin-bottom:16px;color:#3b82f6;">Login</h2>
+      <form id="loginForm">
+        <label style="display:block;margin-bottom:8px;">Username</label>
+        <input type="text" id="username" name="username" required style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid #333;background:#111;color:#fff;margin-bottom:12px;">
+
+        <label style="display:block;margin-bottom:8px;">Password</label>
+        <input type="password" id="password" name="password" required style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid #333;background:#111;color:#fff;margin-bottom:16px;">
+
+        <button type="submit" style="background:#3b82f6;border:none;color:#fff;padding:10px 16px;border-radius:8px;cursor:pointer;">Login</button>
+      </form>
+      <div id="loginError" style="color:#ff6b6b;margin-top:12px;display:none;"></div>
+    </div>
+    <script>
+      (function(){
+        const form = document.getElementById('loginForm');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const errDiv = document.getElementById('loginError');
+
+        form.addEventListener('submit', async function(e){
+          e.preventDefault();
+          errDiv.style.display = 'none';
+          errDiv.textContent = '';
+
+          const username = usernameInput.value.trim();
+          const password = passwordInput.value.trim();
+
+          if (!username || !password) {
+            errDiv.textContent = 'Please enter username and password';
+            errDiv.style.display = 'block';
+            return;
+          }
+
+          try {
+            // Send as urlencoded form data
+            const formData = new URLSearchParams();
+            formData.append('username', username);
+            formData.append('password', password);
+
+            console.log('Sending login request...');
+            const resp = await fetch('/login', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+              },
+              body: formData.toString(),
+              credentials: 'same-origin'
+            });
+
+            console.log('Response status:', resp.status);
+            const text = await resp.text();
+            console.log('Response text:', text);
+
+            let data;
+            try {
+              data = JSON.parse(text);
+            } catch (parseErr) {
+              console.error('Failed to parse response as JSON:', parseErr);
+              errDiv.textContent = 'Server returned invalid response: ' + text;
+              errDiv.style.display = 'block';
+              return;
+            }
+
+            if (data.ok) {
+              // Success: redirect to chat page
+              console.log('Login successful, redirecting to /chat');
+              window.location.href = '/chat';
+              return;
+            }
+
+            // Error: show the server's error message
+            errDiv.textContent = data.error || 'Login failed';
+            errDiv.style.display = 'block';
+          } catch (ex) {
+            errDiv.textContent = 'Network error: ' + ex.message;
+            errDiv.style.display = 'block';
+            console.error('Fetch error:', ex);
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

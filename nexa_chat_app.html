@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexa Chat</title>
+    <link rel="stylesheet" href="css/common.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>Nexa Chat</h1>
+                <svg class="settings-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97 0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1 0 .33.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66z"/>
+                </svg>
+            </div>
+            
+            <div class="search-bar">
+                <input type="text" placeholder="Search chats..." id="searchInput">
+            </div>
+            
+            <div class="chat-list" id="chatList">
+                <!-- Chat items will be loaded dynamically based on current user -->
+            </div>
+        </div>
+
+        <!-- Main Chat -->
+        <div class="main-chat">
+            <div class="chat-header">
+                <button class="hamburger" aria-label="Toggle sidebar" onclick="toggleSidebar()">☰</button>
+                <div class="chat-header-info">
+                    <div class="group-avatar">👥</div>
+                    <div class="chat-header-text">
+                        <h2 id="chatTitle">NexaFive</h2>
+                        <p id="chatStatus">5 members online</p>
+                    </div>
+                </div>
+                <div class="menu-icon">⋮</div>
+            </div>
+            
+            <div class="messages-area" id="messagesArea">
+                <!-- Messages will be loaded dynamically -->
+            </div>
+            
+            <div class="input-area">
+                <button class="emoji-btn">😊</button>
+                <input type="text" class="message-input" placeholder="Type a message..." id="messageInput">
+                <button class="send-btn" onclick="sendMessage()">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const messageInput = document.getElementById('messageInput');
+        const messagesArea = document.getElementById('messagesArea');
+        const searchInput = document.getElementById('searchInput');
+        const chatList = document.getElementById('chatList');
+
+    let currentChat = 'NexaFive'; // Current active chat
+    let currentChatType = 'group'; // 'group' or '1v1'
+    let currentUser = null; // Will be fetched from server
+    let lastFetchTime = 0; // Track last fetch to avoid redundant requests
+    let pollInterval = null; // For polling new messages
+    let allChatMessages = {}; // Store last message for each chat
+    let lastChatPreviews = {}; // Cache { chatKey: { time: number, preview: string } }
+    let lastRenderedMessageSig = {}; // Cache per-chat signature for messages area
+
+        const allUsers = ['vishnu', 'sarath', 'devadath', 'alan', 'abhishek'];
+
+        // Fetch current user on page load
+        window.addEventListener('load', function() {
+            fetch('/api/current-user', { credentials: 'same-origin' })
+                .then(resp => resp.json())
+                .then(data => {
+                    currentUser = data.username;
+                    buildChatList();
+                    loadChat('NexaFive', 'group');
+                    // Start polling for new messages every 2 seconds
+                    startPolling();
+                })
+                .catch(() => {
+                    currentUser = 'Unknown';
+                    buildChatList();
+                    loadChat('NexaFive', 'group');
+                    startPolling();
+                });
+        });
+
+        function buildChatList() {
+            // Build array of chats (NexaFive pinned + 1v1s)
+            const chatItems = [];
+
+            chatItems.push({
+                name: 'NexaFive',
+                displayName: 'NexaFive',
+                type: 'group',
+                isPinned: true,
+                lastMessageTime: new Date(8640000000000000),
+                lastMessage: 'Group chat with all members'
+            });
+
+            allUsers.forEach(user => {
+                if (user !== currentUser) {
+                    chatItems.push({
+                        name: user,
+                        displayName: user.charAt(0).toUpperCase() + user.slice(1),
+                        type: '1v1',
+                        isPinned: false,
+                        lastMessageTime: new Date(0),
+                        lastMessage: 'Direct message'
+                    });
+                }
+            });
+
+            // Fetch last messages and compute previews
+            const chatPromises = chatItems.map(item => {
+                const chatKey = item.type === '1v1' ? getChatNameFor1v1(item.name) : item.name;
+                return fetch(`/api/messages/${encodeURIComponent(chatKey)}`, { credentials: 'same-origin' })
+                    .then(r => r.json())
+                    .then(data => {
+                        const msgs = data.messages || [];
+                        if (msgs.length > 0) {
+                            const lastMsg = msgs[msgs.length - 1];
+                            item.lastMessageTime = new Date(lastMsg.timestamp);
+                            const preview = lastMsg.text.length > 30 ? lastMsg.text.substring(0,30) + '...' : lastMsg.text;
+                            item.lastMessage = preview; // show text only, no sender name
+                        }
+                        return { item, chatKey };
+                    })
+                    .catch(() => ({ item, chatKey }));
+            });
+
+            Promise.all(chatPromises).then(results => {
+                // Determine if any preview/time changed compared to lastChatPreviews
+                let changed = false;
+                results.forEach(({ item, chatKey }) => {
+                    const cached = lastChatPreviews[chatKey];
+                    const timeVal = item.lastMessageTime ? item.lastMessageTime.getTime() : 0;
+                    const prevPreview = cached ? cached.preview : null;
+                    const prevTime = cached ? cached.time : null;
+                    if (prevTime !== timeVal || prevPreview !== item.lastMessage) {
+                        changed = true;
+                    }
+                });
+
+                // If nothing changed and we have previously rendered, skip re-render to avoid blinking
+                const hadRenderedBefore = Object.keys(lastChatPreviews).length > 0;
+                if (!changed && hadRenderedBefore) return;
+
+                // Update cache
+                results.forEach(({ item, chatKey }) => {
+                    lastChatPreviews[chatKey] = { time: item.lastMessageTime ? item.lastMessageTime.getTime() : 0, preview: item.lastMessage };
+                });
+
+                // Sort items: pinned first, then newest
+                const items = results.map(r => r.item);
+                items.sort((a,b) => {
+                    if (a.isPinned) return -1;
+                    if (b.isPinned) return 1;
+                    return b.lastMessageTime - a.lastMessageTime;
+                });
+
+                // Preserve active chat
+                const activeChatName = currentChat;
+
+                // Rebuild DOM
+                chatList.innerHTML = '';
+                items.forEach((item, index) => {
+                    const chatDiv = document.createElement('div');
+                    const isActive = item.name === activeChatName || (item.type === '1v1' && activeChatName === item.name && currentChatType === '1v1');
+                    chatDiv.className = 'chat-item' + (isActive ? ' active' : '');
+                    chatDiv.onclick = function() { selectChat(this, item.name, item.type); };
+
+                    const timeStr = item.lastMessageTime.getTime() !== 0 ? item.lastMessageTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '--';
+                    chatDiv.innerHTML = `
+                        <div class="chat-item-header">
+                            <span class="chat-name">${item.displayName}</span>
+                            <span class="chat-time">${timeStr}</span>
+                        </div>
+                        <div class="chat-preview">${item.lastMessage}</div>
+                    `;
+                    chatList.appendChild(chatDiv);
+                });
+            }).catch(err => console.error('buildChatList error:', err));
+        }
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            // For 1v1 chats, use standardized chat name (sorted usernames)
+            const chatNameToSave = currentChatType === '1v1' 
+                ? getChatNameFor1v1(currentChat) 
+                : currentChat;
+
+            // Send message to server
+            fetch('/api/messages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ chat_name: chatNameToSave, text: text })
+            })
+            .then(async resp => {
+                const txt = await resp.text();
+                let data = {};
+                try { data = JSON.parse(txt); } catch(e) { console.error('Invalid JSON response from server:', txt); }
+                if (!resp.ok) {
+                    console.error('Server error sending message:', resp.status, data);
+                    alert('Failed to send message: ' + (data.error || resp.status));
+                    return;
+                }
+
+                if (data.ok) {
+                    messageInput.value = '';
+                    // Reload chat to show the new message immediately
+                    loadChat(currentChat, currentChatType);
+                    // Rebuild chat list to update last message preview and sorting
+                    buildChatList();
+                } else {
+                    console.error('Unexpected response saving message:', data);
+                    alert('Failed to save message');
+                }
+            })
+            .catch(err => {
+                console.error('Error sending message:', err);
+                alert('Network error: ' + err.message);
+            });
+        }
+
+        // Helper function to get standardized 1v1 chat name (alphabetically sorted)
+        function getChatNameFor1v1(otherUser) {
+            return [currentUser, otherUser].sort().join('-vs-');
+        }
+
+        function loadChat(chatName, chatType) {
+            currentChat = chatName;
+            currentChatType = chatType;
+
+            // Update header
+            document.getElementById('chatTitle').textContent = chatName;
+            if (chatType === 'group') {
+                document.getElementById('chatStatus').textContent = '5 members online';
+            } else {
+                const displayName = chatName.charAt(0).toUpperCase() + chatName.slice(1);
+                document.getElementById('chatStatus').textContent = `Chat with ${displayName}`;
+            }
+
+            // For 1v1 chats, use standardized chat name
+            const chatNameToFetch = chatType === '1v1' 
+                ? getChatNameFor1v1(chatName) 
+                : chatName;
+
+            // Fetch messages from server (encode chat name to be safe)
+            fetch(`/api/messages/${encodeURIComponent(chatNameToFetch)}`, { credentials: 'same-origin' })
+                .then(resp => resp.json())
+                .then(data => {
+                    displayMessages(data.messages || []);
+                })
+                .catch(err => {
+                    console.error('Error loading messages:', err);
+                    messagesArea.innerHTML = '<div style="padding:20px;color:#888;">Error loading messages</div>';
+                });
+        }
+
+        function displayMessages(messages) {
+            // Build a signature for messages to avoid unnecessary re-renders
+            const chatKey = currentChatType === '1v1' ? getChatNameFor1v1(currentChat) : currentChat;
+            const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+            const sig = `${messages.length}|${lastMsg ? lastMsg.id : 0}|${lastMsg ? new Date(lastMsg.timestamp).getTime() : 0}`;
+
+            if (lastRenderedMessageSig[chatKey] === sig) {
+                // No changes — skip re-render to avoid blinking
+                return;
+            }
+            lastRenderedMessageSig[chatKey] = sig;
+
+            // Render messages
+            messagesArea.innerHTML = '';
+
+            if (messages.length === 0) {
+                const emptyMsg = document.createElement('div');
+                emptyMsg.style.cssText = 'padding: 40px 20px; text-align: center; color: #666;';
+                emptyMsg.textContent = `No messages yet. Start the conversation!`;
+                messagesArea.appendChild(emptyMsg);
+            } else {
+                messages.forEach(msg => {
+                    const messageDiv = document.createElement('div');
+                    const isOwn = msg.sender === currentUser;
+                    messageDiv.className = `message ${isOwn ? 'sent' : 'received'}`;
+                    
+                    // Format timestamp
+                    const msgTime = new Date(msg.timestamp);
+                    const timeStr = msgTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+                    if (!isOwn) {
+                        messageDiv.innerHTML = `
+                            <div class="message-sender">${msg.sender}</div>
+                            <div class="message-bubble">${msg.text}</div>
+                            <div class="message-time">${timeStr}</div>
+                        `;
+                    } else {
+                        messageDiv.innerHTML = `
+                            <div class="message-bubble">${msg.text}</div>
+                            <div class="message-time">${timeStr}</div>
+                        `;
+                    }
+                    messagesArea.appendChild(messageDiv);
+                });
+            }
+
+            messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+
+        function selectChat(el, chatName, chatType) {
+            const items = document.querySelectorAll('.chat-item');
+            items.forEach(item => item.classList.remove('active'));
+            if (el) el.classList.add('active');
+
+            // Load the chat
+            loadChat(chatName, chatType);
+
+            // On small screens, hide the sidebar after selecting a chat
+            const sidebar = document.querySelector('.sidebar');
+            if (sidebar && window.innerWidth <= 768) sidebar.classList.remove('open');
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.sidebar');
+            if (!sidebar) return;
+            sidebar.classList.toggle('open');
+        }
+
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const items = document.querySelectorAll('.chat-item');
+            
+            items.forEach(item => {
+                const name = item.querySelector('.chat-name').textContent.toLowerCase();
+                item.style.display = name.includes(query) ? 'block' : 'none';
+            });
+        });
+
+        // Polling: fetch new messages every 2 seconds
+        function startPolling() {
+            pollInterval = setInterval(() => {
+                if (currentChat) {
+                    // For 1v1 chats, use standardized chat name
+                    const chatNameToFetch = currentChatType === '1v1' 
+                        ? getChatNameFor1v1(currentChat) 
+                        : currentChat;
+
+                    fetch(`/api/messages/${encodeURIComponent(chatNameToFetch)}`, { credentials: 'same-origin' })
+                        .then(resp => resp.json())
+                        .then(data => {
+                            displayMessages(data.messages || []);
+                            // Rebuild chat list to update last message previews and sorting
+                            buildChatList();
+                        })
+                        .catch(err => console.error('Polling error:', err));
+                }
+            }, 2000); // Poll every 2 seconds
+        }
+
+        // Stop polling when page unloads
+        window.addEventListener('beforeunload', () => {
+            if (pollInterval) clearInterval(pollInterval);
+        });
+
+        // ===== SETTINGS FUNCTIONALITY =====
+        function openSettingsModal() {
+            const modal = document.getElementById('settingsModal');
+            modal.classList.add('open');
+            
+            // Load current user info and saved profile
+            loadProfileData();
+        }
+
+        function closeSettingsModal() {
+            const modal = document.getElementById('settingsModal');
+            modal.classList.remove('open');
+        }
+
+        function loadProfileData() {
+            // Get username from server session (fetch from current page or show placeholder)
+            const userDisplay = document.getElementById('currentUser');
+            
+            // Try to get username from cookie or server
+            fetch('/api/current-user', { credentials: 'same-origin' })
+                .then(resp => resp.json())
+                .then(data => {
+                    if (data.username) {
+                        userDisplay.textContent = data.username;
+                        document.title = `Nexa Chat - ${data.username}`;
+                    }
+                })
+                .catch(() => {
+                    userDisplay.textContent = 'Unknown User';
+                });
+
+            // Load saved profile from localStorage
+            const displayName = localStorage.getItem('displayName') || '';
+            const userStatus = localStorage.getItem('userStatus') || '';
+            document.getElementById('displayName').value = displayName;
+            document.getElementById('userStatus').value = userStatus;
+        }
+
+        function saveProfile() {
+            const displayName = document.getElementById('displayName').value.trim();
+            const userStatus = document.getElementById('userStatus').value.trim();
+            
+            if (displayName || userStatus) {
+                localStorage.setItem('displayName', displayName);
+                localStorage.setItem('userStatus', userStatus);
+                alert('Profile saved!');
+                closeSettingsModal();
+            } else {
+                alert('Please enter at least a display name or status');
+            }
+        }
+
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                // Redirect to logout endpoint
+                window.location.href = '/logout';
+            }
+        }
+
+        // Wire settings icon click
+        document.addEventListener('DOMContentLoaded', function() {
+            const settingsIcon = document.querySelector('.settings-icon');
+            if (settingsIcon) {
+                settingsIcon.addEventListener('click', openSettingsModal);
+            }
+
+            // Close modal when clicking outside it
+            const modal = document.getElementById('settingsModal');
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    closeSettingsModal();
+                }
+            });
+        });
+    </script>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="modal-close" onclick="closeSettingsModal()">✕</button>
+            </div>
+
+            <!-- User Info Section -->
+            <div class="modal-section">
+                <h3>Logged in as</h3>
+                <p id="currentUser" style="font-weight: 600; color: #3b82f6;"></p>
+            </div>
+
+            <!-- Profile Section -->
+            <div class="modal-section">
+                <h3>Profile</h3>
+                <label>Display Name</label>
+                <input type="text" id="displayName" placeholder="Your display name">
+                <label>Status</label>
+                <input type="text" id="userStatus" placeholder="e.g., Available, Busy, Away">
+            </div>
+
+            <!-- Buttons -->
+            <div class="modal-buttons">
+                <button class="modal-btn primary" onclick="saveProfile()">Save</button>
+                <button class="modal-btn secondary" onclick="closeSettingsModal()">Cancel</button>
+                <button class="modal-btn danger" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
