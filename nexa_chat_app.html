@@ -7,53 +7,52 @@
     <link rel="stylesheet" href="css/common.css">
 </head>
 <body>
+
     <div class="container">
-        <!-- Sidebar -->
-        <div class="sidebar">
+        <!-- Sidebar (hidden on mobile, toggled by hamburger) -->
+        <nav class="sidebar" aria-label="Chat list">
             <div class="sidebar-header">
                 <h1>Nexa Chat</h1>
-                <svg class="settings-icon" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97 0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1 0 .33.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66z"/>
-                </svg>
+                <button class="settings-icon" aria-label="Settings" tabindex="0">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97 0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1 0 .33.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66z"/>
+                    </svg>
+                </button>
             </div>
-            
             <div class="search-bar">
-                <input type="text" placeholder="Search chats..." id="searchInput">
+                <input type="text" placeholder="Search chats..." id="searchInput" aria-label="Search chats">
             </div>
-            
             <div class="chat-list" id="chatList">
                 <!-- Chat items will be loaded dynamically based on current user -->
             </div>
-        </div>
+        </nav>
 
         <!-- Main Chat -->
-        <div class="main-chat">
-            <div class="chat-header">
-                <button class="hamburger" aria-label="Toggle sidebar" onclick="toggleSidebar()">☰</button>
+        <main class="main-chat" aria-label="Chat area">
+            <header class="chat-header">
+                <button class="hamburger" aria-label="Open chat list" onclick="toggleSidebar()" tabindex="0">☰</button>
                 <div class="chat-header-info">
-                    <div class="group-avatar">👥</div>
+                    <div class="group-avatar" aria-hidden="true">👥</div>
                     <div class="chat-header-text">
                         <h2 id="chatTitle">NexaFive</h2>
                         <p id="chatStatus">5 members online</p>
                     </div>
                 </div>
-                <div class="menu-icon">⋮</div>
-            </div>
-            
-            <div class="messages-area" id="messagesArea">
+                <button class="menu-icon" aria-label="Chat options" tabindex="0">⋮</button>
+            </header>
+            <section class="messages-area" id="messagesArea" aria-live="polite">
                 <!-- Messages will be loaded dynamically -->
-            </div>
-            
-            <div class="input-area">
-                <button class="emoji-btn">😊</button>
-                <input type="text" class="message-input" placeholder="Type a message..." id="messageInput">
-                <button class="send-btn" onclick="sendMessage()">
+            </section>
+            <form class="input-area" onsubmit="event.preventDefault(); sendMessage();" autocomplete="off" aria-label="Send message">
+                <button type="button" class="emoji-btn" aria-label="Insert emoji" tabindex="0">😊</button>
+                <input type="text" class="message-input" placeholder="Type a message..." id="messageInput" aria-label="Type a message" autocomplete="off">
+                <button type="submit" class="send-btn" aria-label="Send message" tabindex="0">
                     <svg viewBox="0 0 24 24">
                         <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
                     </svg>
                 </button>
-            </div>
-        </div>
+            </form>
+        </main>
     </div>
 
     <script>
@@ -439,9 +438,10 @@
 
         // Wire settings icon click
         document.addEventListener('DOMContentLoaded', function() {
-            const settingsIcon = document.querySelector('.settings-icon');
-            if (settingsIcon) {
-                settingsIcon.addEventListener('click', openSettingsModal);
+            // Make settings icon a button for accessibility
+            const settingsIconBtn = document.querySelector('.settings-icon');
+            if (settingsIconBtn) {
+                settingsIconBtn.addEventListener('click', openSettingsModal);
             }
 
             // Close modal when clicking outside it
@@ -451,6 +451,11 @@
                     closeSettingsModal();
                 }
             });
+
+            // On mobile, hide sidebar by default
+            if (window.innerWidth <= 768) {
+                document.querySelector('.sidebar').classList.remove('open');
+            }
         });
     </script>
 
